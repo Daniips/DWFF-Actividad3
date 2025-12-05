@@ -3,13 +3,28 @@
     <h1>🎯 Finalizar Reserva</h1>
     <p class="subtitle">Completa los datos para confirmar tu reserva</p>
 
+    <!-- Sin espacio seleccionado -->
+    <div v-if="!hasSpace && !showConfirmation" class="no-space-selected">
+      <div class="icon-large">🏢</div>
+      <h2>No hay espacio seleccionado</h2>
+      <p>Por favor, selecciona un espacio desde la página de Espacios para continuar con la reserva.</p>
+      <button @click="goBack" class="btn btn-primary btn-large">
+        Ver Espacios Disponibles →
+      </button>
+    </div>
+
     <!-- Mensaje de confirmación -->
-    <div v-if="showConfirmation" class="confirmation-message">
+    <div v-else-if="showConfirmation" class="confirmation-message">
       <div class="confirmation-icon">✅</div>
       <h2>¡Reserva Confirmada!</h2>
       <p>Hemos recibido tu solicitud de reserva correctamente.</p>
-      <p><strong>{{ formData.name }}</strong>, recibirás un correo de confirmación en <strong>{{ formData.email }}</strong></p>
-      <p>Fecha y hora: <strong>{{ formData.date }} a las {{ formData.time }}</strong></p>
+      <div class="confirmation-details">
+        <p><strong>{{ formData.name }}</strong>, recibirás un correo de confirmación en <strong>{{ formData.email }}</strong></p>
+        <p>Espacio: <strong>{{ confirmedReservation?.roomName }}</strong></p>
+        <p>Fecha: <strong>{{ formatDate(confirmedReservation?.startDate) }}</strong></p>
+        <p>Hora: <strong>{{ formatTime(confirmedReservation?.startDate) }}</strong></p>
+        <p>ID de Reserva: <strong>#{{ confirmedReservation?.id }}</strong></p>
+      </div>
       <button @click="resetForm" class="btn btn-primary">Nueva Reserva</button>
     </div>
 
@@ -26,7 +41,7 @@
               <h2>{{ selectedSpace.name }}</h2>
               <div class="space-info">
                 <p><span class="icon">🏢</span> <strong>Planta:</strong> {{ selectedSpace.floor }}</p>
-                <p><span class="icon">👥</span> <strong>Capacidad:</strong> {{ selectedSpace.capacity }} personas</p>
+                <p><span class="icon">👥</span> <strong>Capacidad:</strong> {{ selectedSpace.capacityLabel }}</p>
                 <p><span class="icon">💰</span> <strong>Precio:</strong> {{ selectedSpace.price }}€/hora</p>
               </div>
             </div>
@@ -149,8 +164,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useReservationStore } from '../stores/reservationStore'
 
 const router = useRouter()
+const reservationStore = useReservationStore()
 
 // Estado del formulario
 const formData = ref({
@@ -171,22 +188,94 @@ const errors = ref({
 
 // Control de confirmación
 const showConfirmation = ref(false)
+const confirmedReservation = ref(null)
 
-// Espacio seleccionado (simulado - en producción vendría del estado global o ruta)
-const selectedSpace = ref({
-  name: 'Sala de Reuniones Premium',
-  floor: '3ª Planta',
-  capacity: 8,
-  price: 25,
-  image: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&h=400&fit=crop',
-  description: 'reuniones ejecutivas y presentaciones profesionales'
+// Espacio seleccionado desde el store
+const selectedSpace = computed(() => {
+  const room = reservationStore.selectedRoomDetails
+  if (!room) return null
+
+  return {
+    id: room.id,
+    name: room.name,
+    floor: `${room.planta}ª Planta`,
+    capacity: getCapacityNumber(room.capacity),
+    price: room.precio,
+    image: getRoomImage(room.capacity),
+    description: getDescription(room.capacity),
+    capacityLabel: getCapacityLabel(room.capacity)
+  }
 })
+
+// Verificar si hay espacio seleccionado
+const hasSpace = computed(() => selectedSpace.value !== null)
 
 // Fecha mínima (hoy)
 const minDate = computed(() => {
   const today = new Date()
   return today.toISOString().split('T')[0]
 })
+
+// Funciones auxiliares
+function getCapacityLabel(capacity) {
+  const labels = {
+    '1': '1 persona',
+    '2-4': '2-4 personas',
+    '5-8': '5-8 personas',
+    '9+': '9+ personas'
+  }
+  return labels[capacity] || capacity
+}
+
+function getCapacityNumber(capacity) {
+  const numbers = {
+    '1': 1,
+    '2-4': 4,
+    '5-8': 8,
+    '9+': 12
+  }
+  return numbers[capacity] || 4
+}
+
+function getRoomImage(capacity) {
+  const images = {
+    '1': 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=600&h=400&fit=crop',
+    '2-4': 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&h=400&fit=crop',
+    '5-8': 'https://images.unsplash.com/photo-1431540015161-0bf868a2d407?w=600&h=400&fit=crop',
+    '9+': 'https://images.unsplash.com/photo-1511578314322-379afb476865?w=600&h=400&fit=crop'
+  }
+  return images[capacity] || images['2-4']
+}
+
+function getDescription(capacity) {
+  const descriptions = {
+    '1': 'trabajo individual y concentración',
+    '2-4': 'reuniones pequeñas y colaboración en equipo',
+    '5-8': 'reuniones ejecutivas y presentaciones profesionales',
+    '9+': 'eventos, talleres y reuniones corporativas'
+  }
+  return descriptions[capacity] || 'reuniones y trabajo colaborativo'
+}
+
+function formatDate(isoDate) {
+  if (!isoDate) return ''
+  const date = new Date(isoDate)
+  return date.toLocaleDateString('es-ES', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
+}
+
+function formatTime(isoDate) {
+  if (!isoDate) return ''
+  const date = new Date(isoDate)
+  return date.toLocaleTimeString('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
 
 // Validación de email
 const validateEmail = (email) => {
@@ -247,10 +336,40 @@ const validateForm = () => {
 
 // Enviar formulario
 const handleSubmit = () => {
+  if (!hasSpace.value) {
+    alert('Por favor, selecciona un espacio primero desde la página de Espacios')
+    router.push('/spaces')
+    return
+  }
+
   if (validateForm()) {
-    showConfirmation.value = true
-    // Scroll al inicio para ver el mensaje
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    try {
+      // Preparar datos para la reserva según el schema
+      const startDateTime = `${formData.value.date}T${formData.value.time}:00`
+      const startDate = new Date(startDateTime)
+      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000) // +1 hora por defecto
+
+      const reservationData = {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        userId: 1, // ID de usuario por defecto
+        additionalPreferences: formData.value.comments ? [formData.value.comments] : [],
+        // Datos adicionales del formulario
+        userName: formData.value.name,
+        userEmail: formData.value.email,
+        comments: formData.value.comments
+      }
+
+      // Crear la reserva en el store
+      confirmedReservation.value = reservationStore.createReservation(reservationData)
+
+      showConfirmation.value = true
+      // Scroll al inicio para ver el mensaje
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch (err) {
+      console.error('Error creating reservation:', err)
+      alert('Error al crear la reserva: ' + err.message)
+    }
   }
 }
 
@@ -270,6 +389,9 @@ const resetForm = () => {
     time: ''
   }
   showConfirmation.value = false
+  confirmedReservation.value = null
+  reservationStore.clearCurrentReservation()
+  router.push('/spaces')
 }
 
 // Volver a la página de espacios
@@ -277,10 +399,12 @@ const goBack = () => {
   router.push('/spaces')
 }
 
-// Cargar datos si vienen de la navegación (opcional)
+// Cargar datos al montar
 onMounted(() => {
-  // Aquí podrías cargar el espacio seleccionado desde el state/query params
-  // Por ahora usamos datos simulados
+  // Si no hay espacio seleccionado, se muestra el mensaje correspondiente
+  if (!hasSpace.value) {
+    console.warn('No hay espacio seleccionado')
+  }
 })
 </script>
 
@@ -289,6 +413,37 @@ onMounted(() => {
   font-size: 1.1rem;
   color: #6b7280;
   margin-bottom: 2rem;
+}
+
+/* Sin espacio seleccionado */
+.no-space-selected {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.icon-large {
+  font-size: 5rem;
+  margin-bottom: 1.5rem;
+}
+
+.no-space-selected h2 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  color: #1f2937;
+}
+
+.no-space-selected p {
+  font-size: 1.1rem;
+  color: #6b7280;
+  margin-bottom: 2rem;
+}
+
+.btn-large {
+  padding: 1rem 2.5rem;
+  font-size: 1.1rem;
 }
 
 /* Mensaje de confirmación */
@@ -328,6 +483,18 @@ onMounted(() => {
   font-size: 1.1rem;
   margin-bottom: 0.75rem;
   color: rgba(255, 255, 255, 0.95);
+}
+
+.confirmation-details {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin: 1.5rem 0;
+  border-left: 4px solid white;
+}
+
+.confirmation-details p {
+  margin-bottom: 0.5rem;
 }
 
 .confirmation-message .btn {
